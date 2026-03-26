@@ -1,4 +1,6 @@
 use super::audio_sink::{AudioSink, Channel, PortInfo, SinkType};
+use crate::effect::lpf::{BaseLowPassFilter, ButterworthFilter2};
+use crate::effect::effect::Effect;
 use crate::utils::critical_error_handler;
 
 use std::borrow::BorrowMut;
@@ -33,7 +35,7 @@ impl JackAudioSink {
         })
     }
 
-    pub fn xxx(&mut self) /*-> Self*/{
+    pub fn register_handler(&mut self) {
         let (client, _, _) = self.active_client.take().unwrap().deactivate().unwrap();
 
         let mut channels = Vec::with_capacity(self.port_infos.len());
@@ -43,20 +45,26 @@ impl JackAudioSink {
             }
         }
 
+
+        let mut aboba = ButterworthFilter2::new(48000, 3000, 128);
+
         let callback: Box<dyn FnMut(&jack::Client, &jack::ProcessScope) -> jack::Control + Send> = Box::new(move |client: &jack::Client, ps: &jack::ProcessScope| 
             -> jack::Control {
                 for channel in channels.iter_mut() {
                     let input_buffer = channel.input_port.as_slice(ps);
                     let output_buffer = channel.output_port.as_mut_slice(ps);
-                    output_buffer.copy_from_slice(input_buffer);
+
+                    aboba.process_input(input_buffer);
+                    aboba.operate();
+                    aboba.process_output(output_buffer);
+
+                    //output_buffer.copy_from_slice(input_buffer);
                 }
                 return jack::Control::Continue;
             });
 
         let process_handler = jack::contrib::ClosureProcessHandler::new(callback);
         self.active_client = Some(client.activate_async((), process_handler).unwrap());
-
-        //return self;
     }
 
     fn register_one_to_one_ports(&mut self, number_of_channels: usize) {

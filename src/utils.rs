@@ -2,7 +2,7 @@ use std::process;
 
 pub fn critical_error_handler(error: &str) -> ! {
     eprint!("Пиздец: {}\n", error);
-    process::exit(1);
+    process::exit(1)
 }
 
 pub fn convert_to_f24_like(vec: &mut Vec<f32>) {
