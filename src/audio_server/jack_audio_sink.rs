@@ -45,20 +45,39 @@ impl JackAudioSink {
             }
         }
 
+        const buf_size: usize = 1024;
+        const quant: usize = 128;
 
-        let mut aboba = ButterworthFilter2::new(48000, 3000, 128);
+        let sample_rate = client.sample_rate();
+        println!("Sample rate: {}", sample_rate);
+        let mut aboba = ButterworthFilter2::new(sample_rate as u32, 1000, buf_size);
 
-        let callback: Box<dyn FnMut(&jack::Client, &jack::ProcessScope) -> jack::Control + Send> = Box::new(move |client: &jack::Client, ps: &jack::ProcessScope| 
+        let mut buffer_in: [f32; buf_size] = [0.0; buf_size];
+        let mut buffer_out: [f32; buf_size] = [0.0; buf_size];
+        let mut index = 0;
+
+        let callback: Box<dyn FnMut(&jack::Client, &jack::ProcessScope) -> jack::Control + Send> = Box::new(move |client: &jack::Client, ps: &jack::ProcessScope|
             -> jack::Control {
                 for channel in channels.iter_mut() {
                     let input_buffer = channel.input_port.as_slice(ps);
                     let output_buffer = channel.output_port.as_mut_slice(ps);
 
-                    aboba.process_input(input_buffer);
-                    aboba.operate();
-                    aboba.process_output(output_buffer);
+                    if input_buffer.len() != quant || output_buffer.len() != quant {
+                        println!("Warning wrong buffer length: Quant: {}; Input: {}; Output: {}", quant, input_buffer.len(), output_buffer.len());
+                    }
 
-                    //output_buffer.copy_from_slice(input_buffer);
+                    let start_in = index as usize * quant;
+                    (&mut buffer_in[start_in..start_in + quant]).copy_from_slice(input_buffer);
+
+                    index = index + 1;
+
+                    if index == (buf_size / quant) {
+                        index = 0;
+                        aboba.operate(buffer_in.as_slice(), buffer_out.as_mut_slice());
+                    }
+
+                    let start_out = index as usize * quant;
+                    output_buffer.copy_from_slice(&buffer_out[start_out..start_out + quant]);
                 }
                 return jack::Control::Continue;
             });
