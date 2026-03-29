@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 io = "0.0.2"
 jack = "0.13.0"
+rand = { version = "0.10.0", features = ["std"] }
 rustfft = "6.2.0"

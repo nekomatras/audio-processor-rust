@@ -1,6 +1,6 @@
 use super::audio_sink::{AudioSink, Channel, PortInfo, SinkType};
-use crate::effect::lpf::{BaseLowPassFilter, ButterworthFilter2};
-use crate::effect::effect::Effect;
+use crate::signal_processing::effect::lpf::{BaseLowPassFilter, ButterworthFilter2};
+use crate::signal_processing::effect::effect::Effect;
 use crate::utils::critical_error_handler;
 
 use std::borrow::BorrowMut;
@@ -61,10 +61,6 @@ impl JackAudioSink {
                 for channel in channels.iter_mut() {
                     let input_buffer = channel.input_port.as_slice(ps);
                     let output_buffer = channel.output_port.as_mut_slice(ps);
-
-                    if input_buffer.len() != quant || output_buffer.len() != quant {
-                        println!("Warning wrong buffer length: Quant: {}; Input: {}; Output: {}", quant, input_buffer.len(), output_buffer.len());
-                    }
 
                     let start_in = index as usize * quant;
                     (&mut buffer_in[start_in..start_in + quant]).copy_from_slice(input_buffer);

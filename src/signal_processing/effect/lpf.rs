@@ -1,5 +1,5 @@
 use std::process;
-use crate::effect::effect::Effect;
+use crate::signal_processing::effect::effect::Effect;
 
 use rustfft::{num_complex::ComplexFloat};
 
