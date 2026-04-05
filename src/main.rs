@@ -15,12 +15,13 @@ fn main() {
     let gen_client = create_generators();
     let name = "aboba";
     let mut sink = JackAudioSink::new(name, SinkType::OneToOne).unwrap();
-    sink.init(1);
+    sink.init(2);
+
     sink.register_handler();
 
-    println!("Press enter/return to quit...");
-    let mut user_input = String::new();
-    io::stdin().read_line(&mut user_input).ok();
+    println!("Press enter/return to change handler...");
+    let mut user_input1 = String::new();
+    io::stdin().read_line(&mut user_input1).ok();
 
     gen_client.deactivate().unwrap();
 }

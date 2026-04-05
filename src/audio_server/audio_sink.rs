@@ -1,4 +1,5 @@
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 use jack::{AudioIn, AudioOut};
 
 pub trait AudioSink {
@@ -14,7 +15,7 @@ pub struct PortInfo {
     pub number: usize,
     pub input_port_name: String,
     pub output_port_name: String,
-    pub channel: Option<Channel>,
+    pub channel: Channel,
 }
 
 pub struct Channel {

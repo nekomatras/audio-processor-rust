@@ -2,7 +2,9 @@ use super::audio_sink::{AudioSink, Channel, PortInfo, SinkType};
 use crate::signal_processing::effect::lpf::{BaseLowPassFilter, ButterworthFilter2};
 use crate::signal_processing::effect::effect::Effect;
 use crate::utils::critical_error_handler;
+use crate::signal_processing::processor::Processor;
 
+use std::sync::{Arc, Mutex};
 use std::borrow::BorrowMut;
 use std::{cell::RefCell, error::Error, str::FromStr};
 use std::collections::HashMap;
@@ -11,8 +13,10 @@ use jack::{AudioIn, AudioOut, contrib::ClosureProcessHandler, PortFlags};
 
 pub struct JackAudioSink {
     sink_type: SinkType,
-    port_infos: HashMap<usize, PortInfo>,
-    active_client: Option<jack::AsyncClient<(), ClosureProcessHandler<(), Box<dyn FnMut(&jack::Client, &jack::ProcessScope) -> jack::Control + Send>>>>
+    //port_infos: HashMap<usize, PortInfo>,
+    pub active_client: Option<jack::AsyncClient<(), ClosureProcessHandler<(), Box<dyn FnMut(&jack::Client, &jack::ProcessScope) -> jack::Control + Send>>>>,
+
+    processors: Arc<Mutex<Vec<Processor>>>,
 }
 
 impl JackAudioSink {
@@ -20,7 +24,7 @@ impl JackAudioSink {
 
         let (client, _) = jack::Client::new(client_name, jack::ClientOptions::default())?;
 
-        let callback: Box<dyn FnMut(&jack::Client, &jack::ProcessScope) -> jack::Control + Send> = Box::new(move |_: &jack::Client, _: &jack::ProcessScope| 
+        let callback: Box<dyn FnMut(&jack::Client, &jack::ProcessScope) -> jack::Control + Send> = Box::new(move |_: &jack::Client, _: &jack::ProcessScope|
             -> jack::Control {
                 return jack::Control::Continue;
             });
@@ -30,50 +34,25 @@ impl JackAudioSink {
 
         return Ok(Self {
             sink_type,
-            port_infos: HashMap::new(),
-            active_client: Some(active_client)
+            //port_infos: HashMap::new(),
+            active_client: Some(active_client),
+            processors: Arc::new(Mutex::new(Vec::new()))
         })
     }
 
     pub fn register_handler(&mut self) {
         let (client, _, _) = self.active_client.take().unwrap().deactivate().unwrap();
 
-        let mut channels = Vec::with_capacity(self.port_infos.len());
-        for (_, port_info) in self.port_infos.iter_mut() {
-            if let Some(channel) = port_info.channel.take() {
-                channels.push(channel);
-            }
-        }
-
-        const buf_size: usize = 1024;
-        const quant: usize = 128;
-
         let sample_rate = client.sample_rate();
         println!("Sample rate: {}", sample_rate);
-        let mut aboba = ButterworthFilter2::new(sample_rate as u32, 1000, buf_size);
 
-        let mut buffer_in: [f32; buf_size] = [0.0; buf_size];
-        let mut buffer_out: [f32; buf_size] = [0.0; buf_size];
-        let mut index = 0;
+        let proc_copy = self.processors.clone();
 
         let callback: Box<dyn FnMut(&jack::Client, &jack::ProcessScope) -> jack::Control + Send> = Box::new(move |client: &jack::Client, ps: &jack::ProcessScope|
             -> jack::Control {
-                for channel in channels.iter_mut() {
-                    let input_buffer = channel.input_port.as_slice(ps);
-                    let output_buffer = channel.output_port.as_mut_slice(ps);
-
-                    let start_in = index as usize * quant;
-                    (&mut buffer_in[start_in..start_in + quant]).copy_from_slice(input_buffer);
-
-                    index = index + 1;
-
-                    if index == (buf_size / quant) {
-                        index = 0;
-                        aboba.operate(buffer_in.as_slice(), buffer_out.as_mut_slice());
-                    }
-
-                    let start_out = index as usize * quant;
-                    output_buffer.copy_from_slice(&buffer_out[start_out..start_out + quant]);
+                let mut processors = proc_copy.lock().expect("Can't lock processors ptr copy");
+                for processor in processors.iter_mut() {
+                    processor.process(ps);
                 }
                 return jack::Control::Continue;
             });
@@ -83,7 +62,8 @@ impl JackAudioSink {
     }
 
     fn register_one_to_one_ports(&mut self, number_of_channels: usize) {
-        self.port_infos.reserve(number_of_channels);
+        let mut tmp_processors: Vec<Processor> = Vec::new();
+        tmp_processors.reserve(number_of_channels);
 
         if let Some(active_client) = self.active_client.as_mut() {
             let client = active_client.as_client();
@@ -93,22 +73,27 @@ impl JackAudioSink {
                 input_port_name.push_str(&n.to_string());
                 let mut output_port_name = String::from_str(PortInfo::OUTPUT_PORT_NAME_BASE).unwrap();
                 output_port_name.push_str(&n.to_string());
-    
-    
+
                 let input_port = client.register_port(&input_port_name, jack::AudioIn::default())
                     .unwrap_or_else(|error| { critical_error_handler(&error.to_string()); });
                 let output_port = client.register_port(&output_port_name, jack::AudioOut::default())
                     .unwrap_or_else(|error| { critical_error_handler(&error.to_string()); });
-    
-                self.port_infos.insert(n, PortInfo{
-                    number: n, 
-                    input_port_name, 
-                    output_port_name, 
-                    channel: Some(Channel{input_port, output_port})
-                });
+
+                tmp_processors.push(Processor::new(PortInfo{
+                    number: n,
+                    input_port_name,
+                    output_port_name,
+                    channel: Channel{input_port, output_port}
+                }));
             }
         }
+
+        let mut processors: std::sync::MutexGuard<'_, Vec<Processor>> = self.get_processors_mut();
+        processors.clear();
+        processors.reserve(number_of_channels);
+        processors.append(&mut tmp_processors);
     }
+
 
     fn register_all_to_one_ports(&mut self, _: usize) {
         critical_error_handler("All to One mode not implemented yet!");
@@ -125,7 +110,7 @@ impl JackAudioSink {
                        .unwrap_or_else(|error| { critical_error_handler(&error.to_string()); });
                 }
             }
-            self.port_infos.clear();
+            self.get_processors().clear();
         }
     }
 
@@ -138,6 +123,14 @@ impl JackAudioSink {
             return Ok(port_name_regex);
         }
         return Err("Client is inactive!");
+    }
+
+    fn get_processors(&self) -> std::sync::MutexGuard<'_, Vec<Processor>> {
+        return self.processors.lock().expect("Unable to lock mutex for processors");
+    }
+
+    fn get_processors_mut(&mut self) -> std::sync::MutexGuard<'_, Vec<Processor>> {
+        return self.processors.lock().expect("Unable to lock mutex for processors");
     }
 }
 

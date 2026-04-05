@@ -78,6 +78,10 @@ impl Effect for ButterworthFilter2 {
             output[index] = value;
         }
     }
+
+    fn frame_size_changed(&mut self, new_frame_size: usize) {
+        todo!()
+    }
 }
 
 
@@ -113,7 +117,11 @@ impl BaseLowPassFilter {
 
 impl Effect for BaseLowPassFilter {
     fn operate(&mut self, input: &[f32], output: &mut [f32]) {
-        println!("Aboba: {}", input.len());
+        todo!()
+    }
+
+    fn frame_size_changed(&mut self, new_frame_size: usize) {
+        todo!()
     }
 }
 
