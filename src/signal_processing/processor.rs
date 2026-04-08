@@ -3,7 +3,7 @@ use crate::audio_server::audio_sink::PortInfo;
 
 pub struct Processor {
     port: PortInfo,
-    effects: Vec<Box<dyn Effect>>,
+    pub effects: Vec<Box<dyn Effect>>,
     tmp_buffer: Vec<f32>
 }
 
@@ -14,6 +14,7 @@ impl Processor {
     }
 
     pub fn process(&mut self, ps: &jack::ProcessScope) {
+        println!("Effects: {}", self.effects.len());
         if self.effects.is_empty() {
             self.port.channel.output_port.as_mut_slice(ps).copy_from_slice(self.port.channel.input_port.as_slice(ps));
             return;
@@ -32,13 +33,15 @@ impl Processor {
 
         input_buffer.copy_from_slice(self.port.channel.input_port.as_slice(ps));
 
+        let mut processed = 0;
         for effect in &mut self.effects {
-            effect.operate(input_buffer, output_buffer);
-            std::mem::swap(&mut input_buffer, &mut output_buffer);
-        }
-
-        if std::ptr::eq(output_buffer.as_ptr(), tmp_ptr) {
-            input_buffer.copy_from_slice(output_buffer);
+            if processed == 0 {
+                effect.operate(input_buffer, output_buffer);
+            } else {
+                input_buffer.copy_from_slice(output_buffer);
+                effect.operate(input_buffer, output_buffer);
+            }
+            processed += 1;
         }
     }
 }

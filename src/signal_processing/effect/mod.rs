@@ -1,3 +1,5 @@
 pub mod fuzz;
-pub mod lpf;
 pub mod effect;
+
+pub mod lpf;
+pub mod bpf;

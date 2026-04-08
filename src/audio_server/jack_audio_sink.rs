@@ -1,5 +1,5 @@
 use super::audio_sink::{AudioSink, Channel, PortInfo, SinkType};
-use crate::signal_processing::effect::lpf::{BaseLowPassFilter, ButterworthFilter2};
+use crate::signal_processing::effect::bpf::{ButterworthFilter2};
 use crate::signal_processing::effect::effect::Effect;
 use crate::utils::critical_error_handler;
 use crate::signal_processing::processor::Processor;
@@ -79,12 +79,17 @@ impl JackAudioSink {
                 let output_port = client.register_port(&output_port_name, jack::AudioOut::default())
                     .unwrap_or_else(|error| { critical_error_handler(&error.to_string()); });
 
-                tmp_processors.push(Processor::new(PortInfo{
+                let mut proc = Processor::new(PortInfo{
                     number: n,
                     input_port_name,
                     output_port_name,
                     channel: Channel{input_port, output_port}
-                }));
+                });
+
+                let filter = ButterworthFilter2::new(48000, 5000, 10000, 128);
+                proc.effects.push(Box::new(filter));
+
+                tmp_processors.push(proc);
             }
         }
 

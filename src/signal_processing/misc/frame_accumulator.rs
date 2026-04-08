@@ -76,8 +76,12 @@ impl Effect for FrameAccumulator {
 
         output.copy_from_slice(self.get_output_slice());
     }
-    
-    fn frame_size_changed(&mut self, new_frame_size: usize) {
+
+    fn reset(&mut self) {
         todo!()
+    }
+
+    fn get_info(&self) -> String {
+        return format!("FrameAccumulator: {} -> {}", self.original_frame_size, self.target_frame_size);
     }
 }
